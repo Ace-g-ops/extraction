@@ -19,8 +19,8 @@ return new class extends Migration
             $table->unsignedBigInteger('wp_post_id')->nullable();
             $table->string('content_hash', 64)->nullable();
             $table->string('status')->default('pending');
-            $table->string('error')->nullable();
-            $table->timestamps('synced_at')->nullable();
+            $table->text('error')->nullable();
+            $table->timestamp('synced_at')->nullable();
             $table->timestamps();
         });
     }
