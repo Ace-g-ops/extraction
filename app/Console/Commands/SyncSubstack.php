@@ -28,6 +28,14 @@ class SyncSubstack extends Command
             $this->error('Feed fetch failed.');
             return self::FAILURE;
         }
+        if (! str_contains($feed->header('Content-Type'), 'xml')) {
+            Log::error('Feed is not XML', ['type' => $feed->header('Content-Type')]);
+            $this->error('Got ' . $feed->header('Content-Type') . ' instead of XML. Check SUBSTACK_FEED_URL.');
+            return self::FAILURE;
+        }
+
+        libxml_use_internal_errors(true);
+        $xml = simplexml_load_string($feed->body(), 'SimpleXMLElement', LIBXML_NOCDATA);
 
         $xml = simplexml_load_string($feed->body(), 'SimpleXMLElement', LIBXML_NOCDATA);
         if ($xml === false) {
