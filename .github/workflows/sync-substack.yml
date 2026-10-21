@@ -1,0 +1,51 @@
+name: Sync Substack to WordPress
+
+on:
+  schedule:
+    # UTC. Hourly (minute 7 avoids the busy top-of-hour queue).
+    - cron: '7 * * * *'
+  workflow_dispatch: {}   
+
+concurrency:
+  group: sync-substack
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'          # match the PHP requirement in composer.json
+          extensions: mbstring, xml, curl, zip, bcmath, pdo_pgsql
+          tools: composer:v2
+          coverage: none
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Install dependencies
+        run: composer install --no-dev --prefer-dist --no-progress --optimize-autoloader
+
+      - name: Sync new posts
+        run: php artisan sync:substack
+        env:
+          APP_ENV: production
+          APP_DEBUG: 'false'
+          APP_KEY: ${{ secrets.APP_KEY }}
+          DB_CONNECTION: pgsql
+          DB_URL: ${{ secrets.DB_URL }}
+          WPCOM_ACCESS_TOKEN: ${{ secrets.WPCOM_ACCESS_TOKEN }}
+          SUBSTACK_FEED_URL: ${{ vars.SUBSTACK_FEED_URL }}
+          SUBSTACK_SYNC_AFTER: ${{ vars.SUBSTACK_SYNC_AFTER }}
+          WPCOM_SITE: ${{ vars.WPCOM_SITE }}
+          WP_POST_STATUS: ${{ vars.WP_POST_STATUS }}
