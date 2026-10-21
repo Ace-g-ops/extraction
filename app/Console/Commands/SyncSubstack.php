@@ -106,7 +106,18 @@ class SyncSubstack extends Command
 
     private function clean(string $html, string $link): string
     {
-        // TODO v2: strip subscribe/share widgets, upload images via /media/new.
+        //  remove empty paragraphs (including ones holding only &nbsp; or <br>)
+        $html = preg_replace('#<p[^>]*>(\s|&nbsp;|<br\s*/?>)*</p>#i', '', $html);
+
+        // remove line breaks sitting between tags, so WordPress doesn't turn them into <br>/<p>
+        $html = preg_replace('#>\s*[\r\n]+\s*<#', '><', $html);
+
+        //  collapse runs of <br> into one
+        $html = preg_replace('#(<br\s*/?>\s*){2,}#i', '<br>', $html);
+
+        $html = trim($html);
+
+        // strip subscribe/share widgets, upload images via /media/new.
         $html .= '<hr><p><em>Originally published on <a href="' . e($link) . '">Substack</a>.</em></p>';
         return $html;
     }
