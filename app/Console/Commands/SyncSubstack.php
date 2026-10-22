@@ -16,30 +16,44 @@ class SyncSubstack extends Command
     public function handle(): int
     {
         try {
-            $feed = Http::timeout(20)->retry(3, 1000, throw: false)->get(config('blogsync.substack_feed'));
+            $feed = Http::accept('application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8')
+                ->withUserAgent('BlogSync/1.0')
+                ->timeout(20)
+                ->retry(3, 1000, throw: false)
+                ->get(config('blogsync.substack_feed'));
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
             Log::error('Substack feed unreachable', ['error' => $e->getMessage()]);
-            $this->error('Feed unreachable.');
+            $this->error('Feed unreachable: ' . $e->getMessage());
             return self::FAILURE;
         }
 
         if ($feed->failed()) {
-            Log::error('Substack feed fetch failed', ['status' => $feed->status()]);
-            $this->error('Feed fetch failed.');
+            $contentType = (string) $feed->header('Content-Type');
+            $bodyExcerpt = substr(trim(strip_tags($feed->body())), 0, 500);
+            Log::error('Substack feed fetch failed', [
+                'status' => $feed->status(),
+                'content_type' => $contentType,
+                'body_excerpt' => $bodyExcerpt,
+            ]);
+            $this->error("Feed fetch failed (HTTP {$feed->status()}; Content-Type: " . ($contentType ?: 'missing') . '). ' . $bodyExcerpt);
             return self::FAILURE;
         }
-        if (! str_contains($feed->header('Content-Type'), 'xml')) {
-            Log::error('Feed is not XML', ['type' => $feed->header('Content-Type')]);
-            $this->error('Got ' . $feed->header('Content-Type') . ' instead of XML. Check SUBSTACK_FEED_URL.');
+        $contentType = (string) $feed->header('Content-Type');
+        if (! str_contains(strtolower($contentType), 'xml')) {
+            Log::error('Feed is not XML', ['type' => $contentType]);
+            $this->error('Got ' . ($contentType ?: 'no Content-Type') . ' instead of XML. Check SUBSTACK_FEED_URL.');
             return self::FAILURE;
         }
 
-        libxml_use_internal_errors(true);
+        $previousLibxmlErrorMode = libxml_use_internal_errors(true);
         $xml = simplexml_load_string($feed->body(), 'SimpleXMLElement', LIBXML_NOCDATA);
-
-        $xml = simplexml_load_string($feed->body(), 'SimpleXMLElement', LIBXML_NOCDATA);
+        $xmlErrors = libxml_get_errors();
+        libxml_clear_errors();
+        libxml_use_internal_errors($previousLibxmlErrorMode);
         if ($xml === false) {
-            $this->error('Could not parse feed.');
+            $details = $xmlErrors ? trim($xmlErrors[0]->message) : 'Unknown XML parse error';
+            Log::error('Substack feed XML parse failed', ['error' => $details]);
+            $this->error('Could not parse feed XML: ' . $details);
             return self::FAILURE;
         }
 
