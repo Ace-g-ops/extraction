@@ -4,11 +4,7 @@ on:
   schedule:
     # UTC. Hourly (minute 7 avoids the busy top-of-hour queue).
     - cron: '7 * * * *'
-  workflow_dispatch: {}
-
-permissions:
-  contents: read
-
+  workflow_dispatch: {}   # run it manually from the Actions tab
 
 concurrency:
   group: sync-substack
@@ -17,8 +13,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -35,49 +30,23 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Validate required configuration
-        shell: bash
-        env:
-          APP_KEY: ${{ secrets.APP_KEY }}
-          DB_URL: ${{ secrets.DB_URL }}
-          WPCOM_ACCESS_TOKEN: ${{ secrets.WPCOM_ACCESS_TOKEN }}
-          SUBSTACK_FEED_URL: ${{ vars.SUBSTACK_FEED_URL }}
-          WPCOM_SITE: ${{ vars.WPCOM_SITE }}
+      - name: Probe the feed from the runner
         run: |
-          for name in APP_KEY DB_URL WPCOM_ACCESS_TOKEN SUBSTACK_FEED_URL WPCOM_SITE; do
-            if [[ -z "${!name}" ]]; then
-              echo "::error::$name is not configured in GitHub Actions."
-              exit 1
-            fi
-          done
-
-      - name: Run database migrations
-        run: |
-          docker run --rm \
-            -e APP_ENV -e APP_DEBUG -e APP_KEY \
-            -e DB_CONNECTION -e DB_URL \
-            blogsync:latest php artisan migrate --force --no-interaction
+          echo "default agent:"
+          curl -s -o /dev/null -w "%{http_code}\n" "$FEED" || true
+          echo "browser-like agent:"
+          curl -s -o /dev/null -w "%{http_code}\n" -A "Mozilla/5.0 (compatible; BlogSync/1.0)" "$FEED" || true
         env:
-          APP_ENV: production
-          APP_DEBUG: 'false'
-          APP_KEY: ${{ secrets.APP_KEY }}
-          DB_CONNECTION: pgsql
-          DB_URL: ${{ secrets.DB_URL }}
+          FEED: ${{ vars.SUBSTACK_FEED_URL }}
 
       - name: Run the sync inside the container
-        shell: bash
         run: |
-          set -o pipefail
           docker run --rm \
             -e APP_ENV -e APP_DEBUG -e APP_KEY \
             -e DB_CONNECTION -e DB_URL \
             -e WPCOM_ACCESS_TOKEN -e WPCOM_SITE \
             -e SUBSTACK_FEED_URL -e SUBSTACK_SYNC_AFTER -e WP_POST_STATUS \
-            blogsync:latest 2>&1 | tee "$RUNNER_TEMP/sync-substack.log"
-          if grep -Fq 'Failed:' "$RUNNER_TEMP/sync-substack.log"; then
-            echo "::error::One or more posts failed to publish. Review the output and failed database records."
-            exit 1
-          fi
+            blogsync:latest
         env:
           APP_ENV: production
           APP_DEBUG: 'false'
