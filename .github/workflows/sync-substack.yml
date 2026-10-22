@@ -30,6 +30,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Probe the feed from the runner
+        run: |
+          echo "default agent:"
+          curl -s -o /dev/null -w "%{http_code}\n" "$FEED" || true
+          echo "browser-like agent:"
+          curl -s -o /dev/null -w "%{http_code}\n" -A "Mozilla/5.0 (compatible; BlogSync/1.0)" "$FEED" || true
+        env:
+          FEED: ${{ vars.SUBSTACK_FEED_URL }}
+
       - name: Run the sync inside the container
         run: |
           docker run --rm \
