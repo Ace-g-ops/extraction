@@ -4,13 +4,10 @@ on:
   schedule:
     # UTC. Hourly (minute 7 avoids the busy top-of-hour queue).
     - cron: '7 * * * *'
-
   workflow_dispatch: {}
 
 permissions:
   contents: read
-
-  workflow_dispatch: {}   # run it manually from the Actions tab
 
 
 concurrency:
@@ -20,10 +17,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-
     timeout-minutes: 15
-
-    timeout-minutes: 10
 
 
     steps:
@@ -40,19 +34,6 @@ jobs:
           tags: blogsync:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Probe the feed from the runner
-        run: |
-          echo "default agent:"
-          curl -s -o /dev/null -w "%{http_code}\n" "$FEED" || true
-          echo "browser-like agent:"
-          curl -s -o /dev/null -w "%{http_code}\n" -A "Mozilla/5.0 (compatible; BlogSync/1.0)" "$FEED" || true
-        env:
-          FEED: ${{ vars.SUBSTACK_FEED_URL }}
-
-
-      - name: Install dependencies
-        run: composer install --no-dev --prefer-dist --no-progress --optimize-autoloader
 
       - name: Validate required configuration
         shell: bash
@@ -71,7 +52,11 @@ jobs:
           done
 
       - name: Run database migrations
-        run: php artisan migrate --force --no-interaction
+        run: |
+          docker run --rm \
+            -e APP_ENV -e APP_DEBUG -e APP_KEY \
+            -e DB_CONNECTION -e DB_URL \
+            blogsync:latest php artisan migrate --force --no-interaction
         env:
           APP_ENV: production
           APP_DEBUG: 'false'
@@ -79,25 +64,20 @@ jobs:
           DB_CONNECTION: pgsql
           DB_URL: ${{ secrets.DB_URL }}
 
-      - name: Sync new posts
+      - name: Run the sync inside the container
         shell: bash
         run: |
           set -o pipefail
-          php artisan sync:substack 2>&1 | tee "$RUNNER_TEMP/sync-substack.log"
-          if grep -Fq 'Failed:' "$RUNNER_TEMP/sync-substack.log"; then
-            echo "::error::One or more posts failed to publish. Review the output and failed database records."
-            exit 1
-          fi
-
-      - name: Run the sync inside the container
-        run: |
           docker run --rm \
             -e APP_ENV -e APP_DEBUG -e APP_KEY \
             -e DB_CONNECTION -e DB_URL \
             -e WPCOM_ACCESS_TOKEN -e WPCOM_SITE \
             -e SUBSTACK_FEED_URL -e SUBSTACK_SYNC_AFTER -e WP_POST_STATUS \
-            blogsync:latest
-
+            blogsync:latest 2>&1 | tee "$RUNNER_TEMP/sync-substack.log"
+          if grep -Fq 'Failed:' "$RUNNER_TEMP/sync-substack.log"; then
+            echo "::error::One or more posts failed to publish. Review the output and failed database records."
+            exit 1
+          fi
         env:
           APP_ENV: production
           APP_DEBUG: 'false'
