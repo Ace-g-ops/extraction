@@ -16,27 +16,30 @@ class SyncSubstack extends Command
     public function handle(): int
     {
         try {
-            $feed = Http::timeout(20)->retry(3, 1000, throw: false)->get(config('blogsync.substack_feed'));
+            $feed = Http::withUserAgent('Mozilla/5.0 (compatible; BlogSync/1.0)')
+                ->withHeaders(['Accept' => 'application/rss+xml, application/xml;q=0.9, */*;q=0.8'])
+                ->timeout(20)
+                ->retry(3, 5000, throw: false)
+                ->get(config('blogsync.substack_feed'));
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
             Log::error('Substack feed unreachable', ['error' => $e->getMessage()]);
-            $this->error('Feed unreachable.');
+            $this->error('Feed unreachable: ' . $e->getMessage());
             return self::FAILURE;
         }
 
         if ($feed->failed()) {
             Log::error('Substack feed fetch failed', ['status' => $feed->status()]);
-            $this->error('Feed fetch failed.');
+            $this->error('Feed fetch failed with status ' . $feed->status() . '.');
             return self::FAILURE;
         }
-        if (! str_contains($feed->header('Content-Type'), 'xml')) {
+
+        if (! str_contains((string) $feed->header('Content-Type'), 'xml')) {
             Log::error('Feed is not XML', ['type' => $feed->header('Content-Type')]);
             $this->error('Got ' . $feed->header('Content-Type') . ' instead of XML. Check SUBSTACK_FEED_URL.');
             return self::FAILURE;
         }
 
         libxml_use_internal_errors(true);
-        $xml = simplexml_load_string($feed->body(), 'SimpleXMLElement', LIBXML_NOCDATA);
-
         $xml = simplexml_load_string($feed->body(), 'SimpleXMLElement', LIBXML_NOCDATA);
         if ($xml === false) {
             $this->error('Could not parse feed.');
@@ -53,13 +56,13 @@ class SyncSubstack extends Command
             $published = Carbon::parse((string) $item->pubDate);
 
             if ($after && $published->lt($after)) continue;
-            if (SyncedPost::where('substack_guid', $guid)->exists()) continue;
 
-            $record = SyncedPost::firstOrCreate([
-                'substack_guid' => $guid,
-                'substack_url'  => (string) $item->link,
-                'title'         => (string) $item->title,
-            ]);
+            $record = SyncedPost::firstOrCreate(
+                ['substack_guid' => $guid],
+                ['substack_url' => (string) $item->link, 'title' => (string) $item->title]
+            );
+
+            if ($record->status === 'synced') continue;
 
             $this->push($record, $item, $published);
         }
@@ -77,7 +80,7 @@ class SyncSubstack extends Command
             $res = Http::withToken(config('blogsync.wpcom_token'))
                 ->asForm()
                 ->timeout(30)
-                ->retry(2, 2000, throw:false)
+                ->retry(2, 2000, throw: false)
                 ->post("https://public-api.wordpress.com/rest/v1.1/sites/{$site}/posts/new", [
                     'title'   => $record->title,
                     'content' => $html,
@@ -106,18 +109,17 @@ class SyncSubstack extends Command
 
     private function clean(string $html, string $link): string
     {
-        //  remove empty paragraphs (including ones holding only &nbsp; or <br>)
+       
         $html = preg_replace('#<p[^>]*>(\s|&nbsp;|<br\s*/?>)*</p>#i', '', $html);
 
         // remove line breaks sitting between tags, so WordPress doesn't turn them into <br>/<p>
         $html = preg_replace('#>\s*[\r\n]+\s*<#', '><', $html);
 
-        //  collapse runs of <br> into one
         $html = preg_replace('#(<br\s*/?>\s*){2,}#i', '<br>', $html);
 
         $html = trim($html);
 
-        // strip subscribe/share widgets, upload images via /media/new.
+        // TODO v2: strip subscribe/share widgets, upload images via /media/new.
         $html .= '<hr><p><em>Originally published on <a href="' . e($link) . '">Substack</a>.</em></p>';
         return $html;
     }
