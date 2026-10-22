@@ -98,11 +98,8 @@ Then open `http://localhost` in your browser. You can register an account, log i
 |------------|-------------|
 | [Laravel](https://laravel.com/) | PHP web framework |
 | [PHP](https://www.php.net/) | Server-side language |
-| [Tailwind CSS](https://tailwindcss.com/) | Utility-first CSS framework |
 | [Vite](https://vitejs.dev/) | Front-end build tool |
-| [Alpine.js](https://alpinejs.dev/) | Lightweight JavaScript framework |
 | [WordPress.com REST API](https://developer.wordpress.com/docs/api/) | Publishing endpoint |
-| [Docker](https://www.docker.com/) | Containerization for scheduled runs |
 
 ## Contributing
 
@@ -117,4 +114,4 @@ Pull requests are welcome. If you want to add a feature or fix a bug, please ope
 [![PHP](https://img.shields.io/badge/PHP-777BB4?style=for-the-badge&logo=php&logoColor=white)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/Laravel-FF2D20?style=for-the-badge&logo=laravel&logoColor=white)](https://laravel.com/)
 [![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)](https://vitejs.dev/)
-[![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+
