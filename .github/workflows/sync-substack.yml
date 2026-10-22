@@ -4,7 +4,10 @@ on:
   schedule:
     # UTC. Hourly (minute 7 avoids the busy top-of-hour queue).
     - cron: '7 * * * *'
-  workflow_dispatch: {}   
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
 
 concurrency:
   group: sync-substack
@@ -13,7 +16,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -36,8 +39,40 @@ jobs:
       - name: Install dependencies
         run: composer install --no-dev --prefer-dist --no-progress --optimize-autoloader
 
+      - name: Validate required configuration
+        shell: bash
+        env:
+          APP_KEY: ${{ secrets.APP_KEY }}
+          DB_URL: ${{ secrets.DB_URL }}
+          WPCOM_ACCESS_TOKEN: ${{ secrets.WPCOM_ACCESS_TOKEN }}
+          SUBSTACK_FEED_URL: ${{ vars.SUBSTACK_FEED_URL }}
+          WPCOM_SITE: ${{ vars.WPCOM_SITE }}
+        run: |
+          for name in APP_KEY DB_URL WPCOM_ACCESS_TOKEN SUBSTACK_FEED_URL WPCOM_SITE; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::$name is not configured in GitHub Actions."
+              exit 1
+            fi
+          done
+
+      - name: Run database migrations
+        run: php artisan migrate --force --no-interaction
+        env:
+          APP_ENV: production
+          APP_DEBUG: 'false'
+          APP_KEY: ${{ secrets.APP_KEY }}
+          DB_CONNECTION: pgsql
+          DB_URL: ${{ secrets.DB_URL }}
+
       - name: Sync new posts
-        run: php artisan sync:substack
+        shell: bash
+        run: |
+          set -o pipefail
+          php artisan sync:substack 2>&1 | tee "$RUNNER_TEMP/sync-substack.log"
+          if grep -Fq 'Failed:' "$RUNNER_TEMP/sync-substack.log"; then
+            echo "::error::One or more posts failed to publish. Review the output and failed database records."
+            exit 1
+          fi
         env:
           APP_ENV: production
           APP_DEBUG: 'false'
