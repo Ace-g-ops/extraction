@@ -33,7 +33,7 @@ class SyncSubstack extends Command
             return self::FAILURE;
         }
 
-        if (! str_contains((string) $feed->header('Content-Type'), 'xml')) {
+        if (!str_contains((string) $feed->header('Content-Type'), 'xml')) {
             Log::error('Feed is not XML', ['type' => $feed->header('Content-Type')]);
             $this->error('Got ' . $feed->header('Content-Type') . ' instead of XML. Check SUBSTACK_FEED_URL.');
             return self::FAILURE;
@@ -93,7 +93,7 @@ class SyncSubstack extends Command
             }
 
             $record->update([
-                'wp_post_id'   => $res->json('ID'),   // note: capital ID in the WordPress.com API
+                'wp_post_id'   => $res->json('ID'),
                 'content_hash' => hash('sha256', $html),
                 'status'       => 'synced',
                 'synced_at'    => now(),
