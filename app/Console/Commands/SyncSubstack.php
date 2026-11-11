@@ -22,19 +22,19 @@ class SyncSubstack extends Command
                 ->retry(3, 5000, throw: false)
                 ->get(config('blogsync.substack_feed'));
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
-            Log::error('Substack feed unreachable', ['error' => $e->getMessage()]);
+            // Log::error('Substack feed unreachable', ['error' => $e->getMessage()]);
             $this->error('Feed unreachable: ' . $e->getMessage());
             return self::FAILURE;
         }
 
         if ($feed->failed()) {
-            Log::error('Substack feed fetch failed', ['status' => $feed->status()]);
+            // Log::error('Substack feed fetch failed', ['status' => $feed->status()]);
             $this->error('Feed fetch failed with status ' . $feed->status() . '.');
             return self::FAILURE;
         }
 
         if (!str_contains((string) $feed->header('Content-Type'), 'xml')) {
-            Log::error('Feed is not XML', ['type' => $feed->header('Content-Type')]);
+            // Log::error('Feed is not XML', ['type' => $feed->header('Content-Type')]);
             $this->error('Got ' . $feed->header('Content-Type') . ' instead of XML. Check SUBSTACK_FEED_URL.');
             return self::FAILURE;
         }
@@ -102,7 +102,7 @@ class SyncSubstack extends Command
             $this->info("Synced: {$record->title}");
         } catch (\Throwable $e) {
             $record->update(['status' => 'failed', 'error' => $e->getMessage()]);
-            Log::error('Substack sync failed', ['guid' => $record->substack_guid, 'error' => $e->getMessage()]);
+            // Log::error('Substack sync failed', ['guid' => $record->substack_guid, 'error' => $e->getMessage()]);
             $this->error("Failed: {$record->title}");
         }
     }
